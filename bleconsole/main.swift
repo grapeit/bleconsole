@@ -7,5 +7,10 @@
 
 import Foundation
 
-print("Hello, World!")
+let ble = BleConnection()
 
+while let line = readLine() {
+  ble.userInput(line)
+}
+
+print("bye")
