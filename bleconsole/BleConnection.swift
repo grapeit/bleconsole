@@ -5,6 +5,7 @@ import CoreBluetooth
 class BleConnection: NSObject {
   private var manager: CBCentralManager!
   private var peripheral: CBPeripheral!
+  private var service: CBService!
   private var characteristic: CBCharacteristic!
   private var discoveredDevices = [CBPeripheral]()
   private var discoveredServices = [CBService]()
@@ -20,17 +21,48 @@ class BleConnection: NSObject {
     discoveredServices.removeAll()
     discoveredDevices.removeAll()
     characteristic = nil
+    service = nil
     peripheral = nil
     centralManagerDidUpdateState(manager)
   }
 
   func userInput(_ input: String) {
-    if discoveredServices.isEmpty {
+    if input == "\u{18}" { // Ctrl+X
+      if characteristic != nil && service != nil && peripheral != nil {
+        discoveredCharacteristics.removeAll()
+        characteristic = nil
+        print("re-discovering characteristics of service \(service.displayName)")
+        peripheral.discoverCharacteristics(nil, for: service)
+        return
+      }
+      if service != nil && peripheral != nil {
+        discoveredCharacteristics.removeAll()
+        discoveredServices.removeAll()
+        characteristic = nil
+        service = nil
+        print("re-discovering services of \(peripheral.displayName)")
+        peripheral.discoverServices(nil)
+        return
+      }
+      if peripheral != nil {
+        manager.cancelPeripheralConnection(peripheral)
+        return
+      }
+      reset()
+      return
+    }
+    if input == "\u{6}" { // Ctrl+F
+      if characteristic != nil && peripheral != nil {
+        peripheral.readValue(for: characteristic)
+      }
+      return
+    }
+    if peripheral == nil {
       connect(deviceNumber: Int(input) ?? 0)
       return
     }
-    if discoveredCharacteristics.isEmpty {
-      discoverCharacteristics(serviceNumber: Int(input) ?? 0)
+    if service == nil {
+      selectService(serviceNumber: Int(input) ?? 0)
       return
     }
     if characteristic == nil {
@@ -52,13 +84,14 @@ class BleConnection: NSObject {
     manager.connect(peripheral, options: nil)
   }
 
-  func discoverCharacteristics(serviceNumber: Int) {
+  func selectService(serviceNumber: Int) {
     guard peripheral != nil && serviceNumber > 0 && serviceNumber <= discoveredServices.count else {
       print("wrong service #\(serviceNumber)")
       return
     }
-    print("discovering characteristics")
-    peripheral.discoverCharacteristics(nil, for: discoveredServices[serviceNumber - 1])
+    service = discoveredServices[serviceNumber - 1]
+    print("discovering characteristics of service \(service.displayName)")
+    peripheral.discoverCharacteristics(nil, for: service)
   }
 
   func selectCharacteristc(characteristicNumber: Int) {
@@ -117,7 +150,7 @@ extension BleConnection: CBCentralManagerDelegate {
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
     print("connected to \(peripheral.displayName)")
     peripheral.discoverServices(nil)
-    print("discovering services")
+    print("discovering services of \(peripheral.displayName)")
   }
 
   func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
