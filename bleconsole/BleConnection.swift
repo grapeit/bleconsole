@@ -1,10 +1,3 @@
-//
-//  BleConnection.swift
-//  bleconsole
-//
-//  Created by Aleksandr Vinogradov on 6/21/21.
-//
-
 import Foundation
 import CoreBluetooth
 
@@ -20,6 +13,15 @@ class BleConnection: NSObject {
   override init() {
     super.init()
     manager = CBCentralManager(delegate: self, queue: DispatchQueue.global(qos: .background))
+  }
+
+  func reset() {
+    discoveredCharacteristics.removeAll()
+    discoveredServices.removeAll()
+    discoveredDevices.removeAll()
+    characteristic = nil
+    peripheral = nil
+    centralManagerDidUpdateState(manager)
   }
 
   func userInput(_ input: String) {
@@ -46,7 +48,7 @@ class BleConnection: NSObject {
     manager.stopScan()
     peripheral = discoveredDevices[deviceNumber - 1]
     peripheral.delegate = self
-    print("connecting to #\(deviceNumber) [\(Unmanaged.passUnretained(peripheral).toOpaque())] - \(peripheral.name ?? "")")
+    print("connecting to \(peripheral.displayName)")
     manager.connect(peripheral, options: nil)
   }
 
@@ -65,7 +67,8 @@ class BleConnection: NSObject {
       return
     }
     characteristic = discoveredCharacteristics[characteristicNumber - 1]
-    print("communicating with characteristic \(characteristic.uuid)")
+    print("communicating with characteristic \(characteristic.displayName)")
+    peripheral.readValue(for: characteristic)
     peripheral.setNotifyValue(true, for: characteristic)
   }
 
@@ -87,6 +90,7 @@ class BleConnection: NSObject {
 extension BleConnection: CBCentralManagerDelegate {
   func centralManagerDidUpdateState(_ central: CBCentralManager) {
     if central.state == CBManagerState.poweredOn {
+      discoveredDevices.removeAll()
       print("searching for devices")
       central.scanForPeripherals(withServices: nil, options: nil)
     } else {
@@ -101,28 +105,29 @@ extension BleConnection: CBCentralManagerDelegate {
     guard !advertisedName.isEmpty else {
       return
     }
-    let ptr = Unmanaged.passUnretained(peripheral).toOpaque()
     for i in discoveredDevices {
-      if Unmanaged.passUnretained(i).toOpaque() == ptr {
+      if i.identifier == peripheral.identifier {
         return
       }
     }
     discoveredDevices.append(peripheral)
-    print("\(discoveredDevices.count): [\(ptr)] [\(RSSI)] \(peripheral.name ?? advertisedName)")
+    print("\(discoveredDevices.count): [\(RSSI)] \(peripheral.displayName)")
   }
 
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    print("connected to [\(Unmanaged.passUnretained(peripheral).toOpaque())] - \(peripheral.name ?? "")")
+    print("connected to \(peripheral.displayName)")
     peripheral.discoverServices(nil)
     print("discovering services")
   }
 
   func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-    print("failed to connect to [\(Unmanaged.passUnretained(peripheral).toOpaque())] - \(peripheral.name ?? "")")
+    print("failed to connect to \(peripheral.displayName)")
+    reset()
   }
 
   func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-    print("disconnected from [\(Unmanaged.passUnretained(peripheral).toOpaque())] - \(peripheral.name ?? "")")
+    print("disconnected from \(peripheral.displayName)")
+    reset()
   }
 }
 
@@ -136,8 +141,13 @@ extension BleConnection: CBPeripheralDelegate {
     var idx = 0
     for service in discoveredServices {
       idx += 1
-      print("\(idx): \(service.uuid) - \(service.uuid.uuidString)")
+      print("\(idx): \(service.displayName)")
     }
+  }
+
+  func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
+    print("\(peripheral.displayName) modified services")
+    manager.cancelPeripheralConnection(peripheral)
   }
 
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -149,7 +159,7 @@ extension BleConnection: CBPeripheralDelegate {
     var idx = 0
     for characteristic in service.characteristics! {
       idx += 1
-      print("\(idx): \(characteristic.uuid) - \(characteristic.uuid.uuidString)")
+      print("\(idx): \(characteristic.displayName)")
     }
   }
 
@@ -158,5 +168,31 @@ extension BleConnection: CBPeripheralDelegate {
       return
     }
     print("<<\(String(data: data, encoding: .ascii) ?? "")")
+  }
+}
+
+private func makeDisplayName(raw: String, desc: String?) -> String {
+  if raw == desc {
+    return "[\(raw)]"
+  } else {
+    return "[\(raw)] \(desc!)"
+  }
+}
+
+extension CBPeripheral {
+  var displayName: String {
+    return makeDisplayName(raw: identifier.uuidString, desc: name)
+  }
+}
+
+extension CBService {
+  var displayName: String {
+    return makeDisplayName(raw: uuid.uuidString, desc: String(describing: uuid))
+  }
+}
+
+extension CBCharacteristic {
+  var displayName: String {
+    return makeDisplayName(raw: uuid.uuidString, desc: String(describing: uuid))
   }
 }
