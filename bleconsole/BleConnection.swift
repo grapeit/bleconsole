@@ -1,7 +1,6 @@
 import Foundation
 import CoreBluetooth
 
-
 class BleConnection: NSObject {
   private var manager: CBCentralManager!
   private var peripheral: CBPeripheral!
@@ -10,6 +9,12 @@ class BleConnection: NSObject {
   private var discoveredDevices = [CBPeripheral]()
   private var discoveredServices = [CBService]()
   private var discoveredCharacteristics = [CBCharacteristic]()
+  private var outputStyle = OutputStyle.raw
+
+  enum OutputStyle {
+    case raw
+    case hexadecimal
+  }
 
   override init() {
     super.init()
@@ -53,6 +58,7 @@ class BleConnection: NSObject {
     }
     if input == "\u{6}" { // Ctrl+F
       if characteristic != nil && peripheral != nil {
+        print("requesting value for \(characteristic.displayName)")
         peripheral.readValue(for: characteristic)
       }
       return
@@ -66,7 +72,8 @@ class BleConnection: NSObject {
       return
     }
     if characteristic == nil {
-      selectCharacteristc(characteristicNumber: Int(input) ?? 0)
+      outputStyle = input.hasSuffix("h") ? .hexadecimal : .raw
+      selectCharacteristc(characteristicNumber: Int(outputStyle != .raw ? String(input.dropLast()) : input) ?? 0)
       return
     }
     send(input)
@@ -192,7 +199,7 @@ extension BleConnection: CBPeripheralDelegate {
     var idx = 0
     for characteristic in service.characteristics! {
       idx += 1
-      print("\(idx): \(characteristic.displayName)")
+      print("\(idx)[h]: \(characteristic.displayName)")
     }
   }
 
@@ -200,7 +207,14 @@ extension BleConnection: CBPeripheralDelegate {
     guard let data = characteristic.value else {
       return
     }
-    print("<<\(String(data: data, encoding: .ascii) ?? "")")
+    let input: String
+    switch outputStyle {
+    case .raw:
+      input = String(data: data, encoding: .ascii) ?? ""
+    case .hexadecimal:
+      input = data.map{ String(format: "%02hhx", $0) }.joined()
+    }
+    print("<<\(input)")
   }
 }
 
