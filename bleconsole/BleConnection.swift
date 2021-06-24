@@ -68,6 +68,10 @@ class BleConnection: NSObject {
       return
     }
     if service == nil {
+      if discoveredServices.isEmpty {
+        print("still working with \(peripheral.displayName)")
+        return
+      }
       selectService(serviceNumber: Int(input) ?? 0)
       return
     }
@@ -141,10 +145,6 @@ extension BleConnection: CBCentralManagerDelegate {
   }
 
   func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-    let advertisedName = String((advertisementData as NSDictionary).object(forKey: CBAdvertisementDataLocalNameKey) as? NSString ?? "")
-    guard !advertisedName.isEmpty else {
-      return
-    }
     for i in discoveredDevices {
       if i.identifier == peripheral.identifier {
         return
@@ -219,7 +219,7 @@ extension BleConnection: CBPeripheralDelegate {
 }
 
 private func makeDisplayName(raw: String, desc: String?) -> String {
-  if raw == desc {
+  if raw == desc || desc == nil {
     return "[\(raw)]"
   } else {
     return "[\(raw)] \(desc!)"
